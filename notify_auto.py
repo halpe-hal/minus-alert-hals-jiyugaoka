@@ -1,16 +1,15 @@
-import json
+import sqlite3
 from datetime import datetime
 import requests
 import os
 
-# ファイルパス
-DATA_FILE = "minus_data.json"
-LOG_FILE = "notified_log.json"
+# ファイルパス（DBファイル）
+DB_FILE = "minus.db"
 
 # LINE設定
 LINE_ACCESS_TOKEN = "lszhy7usClELTs8XrUl5WUgz2eczgYDv8ej9BdTK4wGa1bH27e8Yaw1wErd8bieRYWEkjTvJXwmVv3c7rTVw/K7aUS4HOCwxd5jTpnohzUxn7+0eCRRAmlH6+LIJow4sAgPK8jELBzasnl9Nqo9/kAdB04t89/1O/w1cDnyilFU="
 CATEGORY_TO_GROUPID = {
-    "ランチ": "REDACTED_LINE_GROUP_ID",
+    "ランチ": "C2addcfb0a7d3375c310ff01e42a1dc30",
     "ディナー": "REDACTED_LINE_GROUP_ID",
     "ベーグル": "REDACTED_LINE_GROUP_ID"
 }
@@ -18,16 +17,28 @@ CATEGORY_TO_GROUPID = {
 # 通知対象日（3日前、2日前、1日前）
 NOTICE_DAYS_BEFORE = [3, 2, 1]
 
-def load_log():
-    if not os.path.exists(LOG_FILE):
-        return []
-    with open(LOG_FILE, "r") as f:
-        return json.load(f)
+# SQLite DB接続
+def get_connection():
+    return sqlite3.connect(DB_FILE, check_same_thread=False)
 
-def save_log(log_data):
-    with open(LOG_FILE, "w") as f:
-        json.dump(log_data, f, ensure_ascii=False, indent=2)
+# 通知済みチェック
+def is_notified(unique_key):
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("SELECT 1 FROM notified_log WHERE unique_key = ?", (unique_key,))
+    result = c.fetchone()
+    conn.close()
+    return result is not None
 
+# 通知済みログに保存
+def save_log(unique_key):
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("INSERT INTO notified_log (unique_key) VALUES (?)", (unique_key,))
+    conn.commit()
+    conn.close()
+
+# 通知送信
 def send_line_notification(group_id, message):
     if not group_id:
         return
@@ -44,10 +55,13 @@ def send_line_notification(group_id, message):
 
 def main():
     today = datetime.today().date()
-    notified_log = load_log()
 
-    with open(DATA_FILE, "r") as f:
-        minus_list = json.load(f)
+    # DBからマイナスデータを取得
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("SELECT id, category, date_display, time_range, minus_count, date_origin FROM minus")
+    minus_list = c.fetchall()
+    conn.close()
 
     group_records_urgent = {"ランチ": {}, "ディナー": {}, "ベーグル": {}}
     group_records_future = {"ランチ": {}, "ディナー": {}, "ベーグル": {}}
@@ -55,9 +69,10 @@ def main():
     new_notified = []
 
     for item in minus_list:
-        category_full = item["カテゴリ"]
-        date_str = item["日付元"]
+        category_full = item[1]  # category
+        date_str = item[5]  # date_origin
         date_obj = datetime.strptime(date_str, "%Y-%m-%d").date()
+        formatted_date = date_obj.strftime("%m/%d")  # ここを修正して、日付を"MM/DD"形式に変更
         days_before = (date_obj - today).days
 
         if "ランチ" in category_full:
@@ -69,7 +84,7 @@ def main():
 
         if days_before in NOTICE_DAYS_BEFORE:
             unique_key = f"{category_full}_{date_str}_{days_before}"
-            if unique_key in notified_log:
+            if is_notified(unique_key):
                 continue
 
             if category_full not in group_records_urgent[group_key]:
@@ -93,18 +108,18 @@ def main():
             message += "🆘直近で埋まっていないマイナス日です！\n"
             for subcat, records in sorted(subcats.items()):
                 message += f"\n{subcat}\n"
-                sorted_records = sorted(records, key=lambda x: x["日付元"])
+                sorted_records = sorted(records, key=lambda x: x[5])  # Sorting by date_origin
                 for r in sorted_records:
-                    message += f"{r['日付']} {r['時間帯']} ▲{r['マイナス人数']}人\n"
+                    message += f"{formatted_date} {r[3]} ▲{r[4]}人\n"  # formatted_date, time_range, minus_count
             message += "\nご協力お願いします！🙇‍♂️\n\n"
 
         if group_records_future[group]:
             message += "\n▼先の日程のマイナス日▼\n"
             for subcat, records in sorted(group_records_future[group].items()):
                 message += f"\n{subcat}\n"
-                sorted_records = sorted(records, key=lambda x: x["日付元"])
+                sorted_records = sorted(records, key=lambda x: x[5])  # Sorting by date_origin
                 for r in sorted_records:
-                    message += f"{r['日付']} {r['時間帯']} ▲{r['マイナス人数']}人\n"
+                    message += f"{formatted_date} {r[3]} ▲{r[4]}人\n"  # formatted_date, time_range, minus_count
 
             message += "\nご協力お願いします！🙇‍♂️"
 
@@ -112,8 +127,8 @@ def main():
 
     # 通知した3日前・2日前・1日前分だけ記録する
     if new_notified:
-        notified_log.extend(new_notified)
-        save_log(notified_log)
+        for unique_key in new_notified:
+            save_log(unique_key)
 
 if __name__ == "__main__":
     main()
