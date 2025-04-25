@@ -28,6 +28,8 @@ def cleanup_expired():
     conn.commit()
     conn.close()
 
+cleanup_expired()
+
 # データ取得
 def fetch_minus(subcategories):
     # まず期限切れを削除して最新化
