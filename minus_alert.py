@@ -21,7 +21,7 @@ def load_data():
 LINE_ACCESS_TOKEN = "lszhy7usClELTs8XrUl5WUgz2eczgYDv8ej9BdTK4wGa1bH27e8Yaw1wErd8bieRYWEkjTvJXwmVv3c7rTVw/K7aUS4HOCwxd5jTpnohzUxn7+0eCRRAmlH6+LIJow4sAgPK8jELBzasnl9Nqo9/kAdB04t89/1O/w1cDnyilFU="
 
 CATEGORY_TO_GROUPID = {
-    "ランチ": "C2addcfb0a7d3375c310ff01e42a1dc30",
+    "ランチ": "REDACTED_LINE_GROUP_ID",
     "ディナー": "REDACTED_LINE_GROUP_ID",
     "ベーグル": "REDACTED_LINE_GROUP_ID"
 }
@@ -59,11 +59,12 @@ def send_group_notification(group_key, categories):
             category_map[cat] = []
         category_map[cat].append(item)
 
-    message = "🆘現在のマイナス日🆘\n"
+    message = "🆘マイナス日🆘\n"
     for cat, records in category_map.items():
         message += f"\n{cat}\n"
         for r in records:
             message += f"{r['日付']} {r['時間帯']} ▲{r['マイナス人数']}人\n"
+    message += "\nご協力お願いします🙇‍♂️"
 
     group_id = CATEGORY_TO_GROUPID[group_key]
     if not group_id:
