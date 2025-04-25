@@ -32,17 +32,17 @@ cleanup_expired()
 
 # データ取得
 def fetch_minus(subcategories):
-    # まず期限切れを削除して最新化
-    cleanup_expired()
     conn = get_connection()
     c = conn.cursor()
     placeholders = ",".join("?" for _ in subcategories)
+    today_str = datetime.today().strftime("%Y-%m-%d")
     c.execute(f"""
         SELECT id, category, date_display, time_range, minus_count
         FROM minus
         WHERE category IN ({placeholders})
+        AND date_origin >= ?
         ORDER BY date_origin
-    """, subcategories)
+    """, subcategories + [today_str])  # サブカテゴリリスト＋今日の日付を渡す
     results = c.fetchall()
     conn.close()
     return results
