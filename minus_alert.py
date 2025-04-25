@@ -15,13 +15,19 @@ CATEGORY_TO_GROUPID = {
     "ベーグル": "REDACTED_LINE_GROUP_ID"
 }
 
+from pytz import timezone
+
+def get_today_jst():
+    jst = timezone('Asia/Tokyo')
+    return datetime.now(jst).date()
+
 # DB接続
 def get_connection():
     return sqlite3.connect(DB_FILE, check_same_thread=False)
 
 # 期限切れデータの削除
 def cleanup_expired():
-    today_str = datetime.today().strftime("%Y-%m-%d")
+    today_str = get_today_jst().strftime("%Y-%m-%d")
     conn = get_connection()
     c = conn.cursor()
     c.execute("DELETE FROM minus WHERE date_origin < ?", (today_str,))
@@ -35,17 +41,18 @@ def fetch_minus(subcategories):
     conn = get_connection()
     c = conn.cursor()
     placeholders = ",".join("?" for _ in subcategories)
-    today_str = datetime.today().strftime("%Y-%m-%d")
+    today_str = get_today_jst().strftime("%Y-%m-%d")
     c.execute(f"""
         SELECT id, category, date_display, time_range, minus_count
         FROM minus
         WHERE category IN ({placeholders})
         AND date_origin >= ?
         ORDER BY date_origin
-    """, subcategories + [today_str])  # サブカテゴリリスト＋今日の日付を渡す
+    """, subcategories + [today_str])
     results = c.fetchall()
     conn.close()
     return results
+
 
 # データ追加
 def insert_minus(category, date_display, date_origin, time_range, minus_count):
