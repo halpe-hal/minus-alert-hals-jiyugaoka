@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, timedelta
+from datetime import datetime
 import requests
 import os
 
@@ -10,12 +10,13 @@ LOG_FILE = "notified_log.json"
 # LINE設定
 LINE_ACCESS_TOKEN = "lszhy7usClELTs8XrUl5WUgz2eczgYDv8ej9BdTK4wGa1bH27e8Yaw1wErd8bieRYWEkjTvJXwmVv3c7rTVw/K7aUS4HOCwxd5jTpnohzUxn7+0eCRRAmlH6+LIJow4sAgPK8jELBzasnl9Nqo9/kAdB04t89/1O/w1cDnyilFU="
 CATEGORY_TO_GROUPID = {
-    "ランチ": "C2addcfb0a7d3375c310ff01e42a1dc30",
-    "ディナー": "C19ec6409b4971ad50d9d1df02bd5c8d7",
-    "ベーグル": ""
+    "ランチ": "REDACTED_LINE_GROUP_ID",
+    "ディナー": "REDACTED_LINE_GROUP_ID",
+    "ベーグル": "REDACTED_LINE_GROUP_ID"
 }
 
-NOTICE_DAYS_BEFORE = [7, 3, 1]
+# 通知対象日（3日前、2日前、1日前）
+NOTICE_DAYS_BEFORE = [3, 2, 1]
 
 def load_log():
     if not os.path.exists(LOG_FILE):
@@ -48,8 +49,10 @@ def main():
     with open(DATA_FILE, "r") as f:
         minus_list = json.load(f)
 
-    # グループごと → サブカテゴリごと → データ一覧
-    group_records = {"ランチ": {}, "ディナー": {}, "ベーグル": {}}
+    group_records_urgent = {"ランチ": {}, "ディナー": {}, "ベーグル": {}}
+    group_records_future = {"ランチ": {}, "ディナー": {}, "ベーグル": {}}
+
+    new_notified = []
 
     for item in minus_list:
         category_full = item["カテゴリ"]
@@ -57,14 +60,6 @@ def main():
         date_obj = datetime.strptime(date_str, "%Y-%m-%d").date()
         days_before = (date_obj - today).days
 
-        if days_before not in NOTICE_DAYS_BEFORE:
-            continue
-
-        unique_key = f"{category_full}_{date_str}_{days_before}"
-        if unique_key in notified_log:
-            continue
-
-        # グループカテゴリを決定
         if "ランチ" in category_full:
             group_key = "ランチ"
         elif "ディナー" in category_full:
@@ -72,28 +67,53 @@ def main():
         else:
             group_key = "ベーグル"
 
-        if category_full not in group_records[group_key]:
-            group_records[group_key][category_full] = []
-        group_records[group_key][category_full].append(item)
+        if days_before in NOTICE_DAYS_BEFORE:
+            unique_key = f"{category_full}_{date_str}_{days_before}"
+            if unique_key in notified_log:
+                continue
 
-        notified_log.append(unique_key)
+            if category_full not in group_records_urgent[group_key]:
+                group_records_urgent[group_key][category_full] = []
+            group_records_urgent[group_key][category_full].append(item)
 
-    # グループごとに通知を作成
-    for group, subcats in group_records.items():
-        if not subcats:
+            new_notified.append(unique_key)
+
+        elif days_before > 3:
+            if category_full not in group_records_future[group_key]:
+                group_records_future[group_key][category_full] = []
+            group_records_future[group_key][category_full].append(item)
+
+    for group, subcats in group_records_urgent.items():
+        if not subcats and not group_records_future[group]:
             continue
 
-        message = "🆘まだ埋まっていないマイナス日です！\n"
+        message = ""
 
-        for subcat, records in sorted(subcats.items()):
-            message += f"\n{subcat}\n"
-            sorted_records = sorted(records, key=lambda x: x["日付元"])
-            for r in sorted_records:
-                message += f"{r['日付']} {r['時間帯']} ▲{r['マイナス人数']}人\n"
+        if subcats:
+            message += "🆘直近で埋まっていないマイナス日です！\n"
+            for subcat, records in sorted(subcats.items()):
+                message += f"\n{subcat}\n"
+                sorted_records = sorted(records, key=lambda x: x["日付元"])
+                for r in sorted_records:
+                    message += f"{r['日付']} {r['時間帯']} ▲{r['マイナス人数']}人\n"
+            message += "\nご協力お願いします！🙇‍♂️\n\n"
+
+        if group_records_future[group]:
+            message += "\n▼先の日程のマイナス日▼\n"
+            for subcat, records in sorted(group_records_future[group].items()):
+                message += f"\n{subcat}\n"
+                sorted_records = sorted(records, key=lambda x: x["日付元"])
+                for r in sorted_records:
+                    message += f"{r['日付']} {r['時間帯']} ▲{r['マイナス人数']}人\n"
+
+            message += "\nご協力お願いします！🙇‍♂️"
 
         send_line_notification(CATEGORY_TO_GROUPID[group], message.strip())
 
-    save_log(notified_log)
+    # 通知した3日前・2日前・1日前分だけ記録する
+    if new_notified:
+        notified_log.extend(new_notified)
+        save_log(notified_log)
 
 if __name__ == "__main__":
     main()
