@@ -155,7 +155,7 @@ col1, col2, col3, col4, col5 = st.columns(5)
 with col1:
     category = st.selectbox("カテゴリ", list(color_map.keys()))
 with col2:
-    minus_date = st.date_input("日付", value=datetime.today())
+    minus_date = st.date_input("日付", value=get_today_jst())
 with col3:
     start_time = st.time_input("開始", value=time(9, 0))
 with col4:
