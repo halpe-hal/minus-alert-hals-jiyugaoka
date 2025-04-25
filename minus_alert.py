@@ -19,12 +19,28 @@ CATEGORY_TO_GROUPID = {
 def get_connection():
     return sqlite3.connect(DB_FILE, check_same_thread=False)
 
+# 期限切れデータの削除
+def cleanup_expired():
+    today_str = datetime.today().strftime("%Y-%m-%d")
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("DELETE FROM minus WHERE date_origin < ?", (today_str,))
+    conn.commit()
+    conn.close()
+
 # データ取得
 def fetch_minus(subcategories):
+    # まず期限切れを削除して最新化
+    cleanup_expired()
     conn = get_connection()
     c = conn.cursor()
     placeholders = ",".join("?" for _ in subcategories)
-    c.execute(f"SELECT id, category, date_display, time_range, minus_count FROM minus WHERE category IN ({placeholders}) ORDER BY date_origin", subcategories)
+    c.execute(f"""
+        SELECT id, category, date_display, time_range, minus_count
+        FROM minus
+        WHERE category IN ({placeholders})
+        ORDER BY date_origin
+    """, subcategories)
     results = c.fetchall()
     conn.close()
     return results
@@ -40,7 +56,7 @@ def insert_minus(category, date_display, date_origin, time_range, minus_count):
     conn.commit()
     conn.close()
 
-# データ更新
+# データ更新／削除
 def update_minus(id, minus_count):
     conn = get_connection()
     c = conn.cursor()
@@ -51,6 +67,7 @@ def update_minus(id, minus_count):
     conn.commit()
     conn.close()
 
+# LINE通知
 def send_group_notification(group_key, subcategories):
     records = fetch_minus(subcategories)
     if not records:
@@ -58,10 +75,8 @@ def send_group_notification(group_key, subcategories):
 
     message = "🆘マイナス日🆘\n"
     cat_map = {}
-    for id, category, date_display, time_range, minus_count in records:
-        if category not in cat_map:
-            cat_map[category] = []
-        cat_map[category].append((date_display, time_range, minus_count))
+    for _id, category, date_display, time_range, minus_count in records:
+        cat_map.setdefault(category, []).append((date_display, time_range, minus_count))
 
     for cat, items in cat_map.items():
         message += f"\n{cat}\n"
@@ -77,13 +92,10 @@ def send_group_notification(group_key, subcategories):
         "Content-Type": "application/json",
         "Authorization": f"Bearer {LINE_ACCESS_TOKEN}"
     }
-    payload = {
-        "to": group_id,
-        "messages": [{"type": "text", "text": message.strip()}]
-    }
+    payload = {"to": group_id, "messages": [{"type": "text", "text": message.strip()}]}
     requests.post("https://api.line.me/v2/bot/message/push", headers=headers, json=payload)
 
-# カテゴリマッピング
+# カテゴリマッピング（色）
 color_map = {
     "ランチ【ホール】": "#ffe4b5",
     "ランチ【キッチン】": "#ffe4b5",
@@ -101,44 +113,38 @@ category_groups = {
 # --- 画面表示スタート ---
 st.markdown("""
     <style>
-        .main > div {
-            max-width: 960px;
-            margin: auto;
-        }
+        .main > div { max-width: 960px; margin: auto; }
         input[type=number] {
-            background-color: #ffffff !important;
-            border: 1px solid #333333 !important;
-            color: #000000 !important;
-            padding: 6px;
-            border-radius: 6px;
+            background-color: #fff !important;
+            border: 1px solid #333 !important;
+            color: #000 !important;
+            padding: 6px; border-radius: 6px;
         }
         input[type=number]:focus {
             border-color: #006a38 !important;
             outline: none !important;
-            box-shadow: 0 0 0 2px rgba(0, 106, 56, 0.2);
+            box-shadow: 0 0 0 2px rgba(0,106,56,0.2);
         }
     </style>
 """, unsafe_allow_html=True)
 
 st.markdown("""
-    <h1 style='text-align: center; color: #333333; font-family: "Segoe UI", sans-serif; font-size:32px;'>
+    <h1 style='text-align:center;color:#333;font-family:"Segoe UI",sans-serif;font-size:32px;'>
         シフトマイナス管理
     </h1>
 """, unsafe_allow_html=True)
 
 st.markdown("""
-    <h2 style='color: #444; margin: 30px 0; border-left: 5px solid #006a38; border-bottom:1px solid #006a38; padding: 1% 1% 1% 3%; font-size: 25px;'>マイナスの新規登録</h2>
+    <h2 style='color:#444;margin:30px 0;
+               border-left:5px solid #006a38;border-bottom:1px solid #006a38;
+               padding:1% 1% 1% 3%;font-size:25px;'>
+        マイナスの新規登録
+    </h2>
 """, unsafe_allow_html=True)
 
 col1, col2, col3, col4, col5 = st.columns(5)
 with col1:
-    category = st.selectbox("カテゴリ", [
-        "ランチ【ホール】",
-        "ランチ【キッチン】",
-        "ディナー【ホール】",
-        "ディナー【キッチン】",
-        "ベーグル"
-    ])
+    category = st.selectbox("カテゴリ", list(color_map.keys()))
 with col2:
     minus_date = st.date_input("日付", value=datetime.today())
 with col3:
@@ -157,48 +163,47 @@ if st.button("登録", use_container_width=True):
         minus_count
     )
     st.success("登録しました！")
-    st.rerun()
 
 st.divider()
 
-# --- 現在募集中のマイナス日 ---
 st.markdown("""
-    <h2 style='color: #444; margin: 30px 0; border-left: 5px solid #006a38; border-bottom:1px solid #006a38; padding: 1% 1% 1% 3%; font-size: 25px;'>現在募集中のマイナス日</h2>
+    <h2 style='color:#444;margin:30px 0;
+               border-left:5px solid #006a38;border-bottom:1px solid #006a38;
+               padding:1% 1% 1% 3%;font-size:25px;'>
+        現在募集中のマイナス日
+    </h2>
 """, unsafe_allow_html=True)
 
-selected_group = st.selectbox("カテゴリを選択", ["ランチ", "ディナー", "ベーグル"])
-subcategories = category_groups[selected_group]
+selected_group = st.selectbox("カテゴリを選択", list(category_groups.keys()))
+subcats = category_groups[selected_group]
+records = fetch_minus(subcats)
 
-records = fetch_minus(subcategories)
-
-found = False
-for idx, (id, category, date_display, time_range, minus_count) in enumerate(records):
-    found = True
-    with st.container():
-        st.markdown(f"""
-            <div style='background-color:{color_map.get(category, "#ffffff")};
-                        padding:15px;border-radius:12px;margin-bottom:10px;'>
-                <h4 style='margin:0;'>{category}（{date_display}）</h4>
-                <p style='margin:0;'>時間帯: {time_range}</p>
-                <p style='margin:0;'>あと <strong>{minus_count}</strong> 人必要</p>
-            </div>
-        """, unsafe_allow_html=True)
-
-        filled = st.number_input(
-            f"埋まった人数を入力（{category} - {date_display}）",
-            min_value=0,
-            max_value=minus_count,
-            key=f"input_{id}"
-        )
-        if filled > 0:
-            if st.button(f"反映（{category} - {date_display}）", key=f"btn_{id}"):
-                new_count = minus_count - filled
-                update_minus(id, new_count)
-                st.rerun()
-
-if not found:
+if not records:
     st.write("現在募集中のマイナスはありません。")
+else:
+    for _id, category, date_display, time_range, minus_count in records:
+        with st.container():
+            st.markdown(f"""
+                <div style='background-color:{color_map.get(category)};
+                            padding:15px;border-radius:12px;margin-bottom:10px;'>
+                    <h4 style='margin:0;'>{category}（{date_display}）</h4>
+                    <p style='margin:0;'>時間帯: {time_range}</p>
+                    <p style='margin:0;'>あと <strong>{minus_count}</strong> 人必要</p>
+                </div>
+            """, unsafe_allow_html=True)
 
-if st.button(f"{selected_group}マイナス募集をする", use_container_width=True, key=f"notify_{selected_group}"):
-    send_group_notification(selected_group, subcategories)
-    st.success("通知を送信しました！")
+            filled = st.number_input(
+                f"埋まった人数を入力（{category} - {date_display}）",
+                min_value=0,
+                max_value=minus_count,
+                key=f"input_{_id}"
+            )
+            if filled > 0:
+                if st.button(f"反映（{category} - {date_display}）", key=f"btn_{_id}"):
+                    new_count = minus_count - filled
+                    update_minus(_id, new_count)
+                    st.rerun()
+
+    if st.button(f"{selected_group}マイナス募集をする", use_container_width=True, key=f"notify_{selected_group}"):
+        send_group_notification(selected_group, subcats)
+        st.success("通知を送信しました！")
