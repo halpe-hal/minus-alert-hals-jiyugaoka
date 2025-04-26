@@ -1,45 +1,51 @@
-import sqlite3
 import requests
 from datetime import datetime
 from pytz import timezone
 
-DB_FILE = "minus.db"
+# --- Supabase設定 ---
+SUPABASE_URL = "https://svexgvaaeeszdtsbggnf.supabase.co"
+SUPABASE_API_KEY = "REDACTED_SUPABASE_KEY"
 
-# LINE設定
+headers = {
+    "apikey": SUPABASE_API_KEY,
+    "Authorization": f"Bearer {SUPABASE_API_KEY}",
+}
+
+# --- LINE設定 ---
 LINE_ACCESS_TOKEN = "lszhy7usClELTs8XrUl5WUgz2eczgYDv8ej9BdTK4wGa1bH27e8Yaw1wErd8bieRYWEkjTvJXwmVv3c7rTVw/K7aUS4HOCwxd5jTpnohzUxn7+0eCRRAmlH6+LIJow4sAgPK8jELBzasnl9Nqo9/kAdB04t89/1O/w1cDnyilFU="
+
 CATEGORY_TO_GROUPID = {
     "ランチ": "C2addcfb0a7d3375c310ff01e42a1dc30",
     "ディナー": "REDACTED_LINE_GROUP_ID",
     "ベーグル": "REDACTED_LINE_GROUP_ID"
 }
 
-# 通知対象日（3日前、2日前、1日前）
 NOTICE_DAYS_BEFORE = [3, 2, 1]
+
+# --- 共通関数 ---
 
 def get_today_jst():
     jst = timezone('Asia/Tokyo')
     return datetime.now(jst).date()
 
-def get_connection():
-    return sqlite3.connect(DB_FILE, check_same_thread=False)
-
-def fetch_minus():
-    today = get_today_jst()
-    conn = get_connection()
-    c = conn.cursor()
-    c.execute("""
-        SELECT id, category, date_display, time_range, minus_count, date_origin
-        FROM minus
-        ORDER BY date_origin
-    """)
-    records = c.fetchall()
-    conn.close()
-    return records
+def fetch_all_minus():
+    today_str = get_today_jst().strftime("%Y-%m-%d")
+    params = {
+        "select": "*",
+        "date_origin": f"gte.{today_str}",
+        "order": "date_origin"
+    }
+    response = requests.get(f"{SUPABASE_URL}/rest/v1/minus", headers=headers, params=params)
+    if response.status_code == 200:
+        return response.json()
+    else:
+        print("取得エラー:", response.text, flush=True)
+        return []
 
 def send_line_notification(group_id, message):
     if not group_id:
         return
-    headers = {
+    headers_line = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {LINE_ACCESS_TOKEN}"
     }
@@ -47,17 +53,26 @@ def send_line_notification(group_id, message):
         "to": group_id,
         "messages": [{"type": "text", "text": message}]
     }
-    response = requests.post("https://api.line.me/v2/bot/message/push", headers=headers, json=payload)
-    print("📨 通知送信結果：", response.status_code)
+    response = requests.post("https://api.line.me/v2/bot/message/push", headers=headers_line, json=payload)
+    print("📨 通知送信結果:", response.status_code, flush=True)
+
+# --- メイン処理 ---
 
 def main():
+    print("🚀 notify_auto.py 実行開始", flush=True)
     today = get_today_jst()
-    all_records = fetch_minus()
+    records = fetch_all_minus()
 
     group_records_urgent = {"ランチ": {}, "ディナー": {}, "ベーグル": {}}
     group_records_future = {"ランチ": {}, "ディナー": {}, "ベーグル": {}}
 
-    for id, category_full, date_display, time_range, minus_count, date_origin in all_records:
+    for record in records:
+        category_full = record["category"]
+        date_display = record["date_display"]
+        time_range = record["time_range"]
+        minus_count = record["minus_count"]
+        date_origin = record["date_origin"]
+
         date_obj = datetime.strptime(date_origin, "%Y-%m-%d").date()
         days_before = (date_obj - today).days
 
@@ -69,21 +84,9 @@ def main():
             group_key = "ベーグル"
 
         if days_before in NOTICE_DAYS_BEFORE:
-            if category_full not in group_records_urgent[group_key]:
-                group_records_urgent[group_key][category_full] = []
-            group_records_urgent[group_key][category_full].append({
-                "date_display": date_display,
-                "time_range": time_range,
-                "minus_count": minus_count
-            })
+            group_records_urgent.setdefault(group_key, {}).setdefault(category_full, []).append((date_display, time_range, minus_count))
         elif days_before > 3:
-            if category_full not in group_records_future[group_key]:
-                group_records_future[group_key][category_full] = []
-            group_records_future[group_key][category_full].append({
-                "date_display": date_display,
-                "time_range": time_range,
-                "minus_count": minus_count
-            })
+            group_records_future.setdefault(group_key, {}).setdefault(category_full, []).append((date_display, time_range, minus_count))
 
     for group, subcats in group_records_urgent.items():
         if not subcats and not group_records_future[group]:
@@ -95,21 +98,21 @@ def main():
             message += "🆘直近で埋まっていないマイナス日です！\n"
             for subcat, records in sorted(subcats.items()):
                 message += f"\n{subcat}\n"
-                for record in sorted(records, key=lambda x: x["date_display"]):
-                    message += f"{record['date_display']} {record['time_range']} ▲{record['minus_count']}人\n"
+                for date_display, time_range, minus_count in sorted(records):
+                    message += f"{date_display} {time_range} ▲{minus_count}人\n"
             message += "\nご協力お願いします！🙇‍♂️\n\n"
 
         if group_records_future[group]:
             message += "\n▼先の日程のマイナス日▼\n"
             for subcat, records in sorted(group_records_future[group].items()):
                 message += f"\n{subcat}\n"
-                for record in sorted(records, key=lambda x: x["date_display"]):
-                    message += f"{record['date_display']} {record['time_range']} ▲{record['minus_count']}人\n"
+                for date_display, time_range, minus_count in sorted(records):
+                    message += f"{date_display} {time_range} ▲{minus_count}人\n"
             message += "\nご協力お願いします！🙇‍♂️"
 
         send_line_notification(CATEGORY_TO_GROUPID[group], message.strip())
 
-if __name__ == "__main__":
-    print("🚀 notify_auto.py 実行開始", flush=True)
-    main()
     print("✅ notify_auto.py 実行完了", flush=True)
+
+if __name__ == "__main__":
+    main()
