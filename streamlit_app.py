@@ -1,12 +1,74 @@
 import streamlit as st
-import sqlite3
 from datetime import datetime, time
 import requests
+from pytz import timezone
 
-st.set_page_config(page_title="シフトマイナス管理システム", layout="wide")
+# --- Supabase設定 ---
+SUPABASE_URL = "https://svexgvaaeeszdtsbggnf.supabase.co"
+SUPABASE_API_KEY = "REDACTED_SUPABASE_KEY"
 
-DB_FILE = "minus.db"
+headers = {
+    "apikey": SUPABASE_API_KEY,
+    "Authorization": f"Bearer {SUPABASE_API_KEY}",
+}
 
+# --- 共通関数 ---
+
+def get_today_jst():
+    jst = timezone('Asia/Tokyo')
+    return datetime.now(jst).date()
+
+def fetch_minus(subcategories):
+    categories_query = ",".join(f'"{cat}"' for cat in subcategories)
+    params = {
+        "select": "*",
+        "category": f"in.({categories_query})",
+        "order": "date_origin"
+    }
+    today_str = get_today_jst().strftime("%Y-%m-%d")
+    params["date_origin"] = f"gte.{today_str}"
+
+    response = requests.get(f"{SUPABASE_URL}/rest/v1/minus", headers=headers, params=params)
+    if response.status_code == 200:
+        return response.json()
+    else:
+        print("取得エラー:", response.text)
+        return []
+
+def insert_minus(category, date_display, date_origin, time_range, minus_count):
+    new_data = {
+        "category": category,
+        "date_display": date_display,
+        "date_origin": date_origin,
+        "time_range": time_range,
+        "minus_count": minus_count
+    }
+    response = requests.post(
+        f"{SUPABASE_URL}/rest/v1/minus",
+        headers={**headers, "Content-Type": "application/json"},
+        json=[new_data]
+    )
+    if response.status_code != 201:
+        print("登録エラー:", response.text)
+
+def update_minus(id, new_count):
+    if new_count <= 0:
+        response = requests.delete(
+            f"{SUPABASE_URL}/rest/v1/minus?id=eq.{id}",
+            headers=headers
+        )
+        if response.status_code != 204:
+            print("削除エラー:", response.text)
+    else:
+        response = requests.patch(
+            f"{SUPABASE_URL}/rest/v1/minus?id=eq.{id}",
+            headers={**headers, "Content-Type": "application/json"},
+            json={"minus_count": new_count}
+        )
+        if response.status_code != 204:
+            print("更新エラー:", response.text)
+
+# --- LINE通知設定 ---
 LINE_ACCESS_TOKEN = "lszhy7usClELTs8XrUl5WUgz2eczgYDv8ej9BdTK4wGa1bH27e8Yaw1wErd8bieRYWEkjTvJXwmVv3c7rTVw/K7aUS4HOCwxd5jTpnohzUxn7+0eCRRAmlH6+LIJow4sAgPK8jELBzasnl9Nqo9/kAdB04t89/1O/w1cDnyilFU="
 
 CATEGORY_TO_GROUPID = {
@@ -15,68 +77,6 @@ CATEGORY_TO_GROUPID = {
     "ベーグル": "REDACTED_LINE_GROUP_ID"
 }
 
-from pytz import timezone
-
-def get_today_jst():
-    jst = timezone('Asia/Tokyo')
-    return datetime.now(jst).date()
-
-# DB接続
-def get_connection():
-    return sqlite3.connect(DB_FILE, check_same_thread=False)
-
-# 期限切れデータの削除
-def cleanup_expired():
-    today_str = get_today_jst().strftime("%Y-%m-%d")
-    conn = get_connection()
-    c = conn.cursor()
-    c.execute("DELETE FROM minus WHERE date_origin < ?", (today_str,))
-    conn.commit()
-    conn.close()
-
-cleanup_expired()
-
-# データ取得
-def fetch_minus(subcategories):
-    conn = get_connection()
-    c = conn.cursor()
-    placeholders = ",".join("?" for _ in subcategories)
-    today_str = get_today_jst().strftime("%Y-%m-%d")
-    c.execute(f"""
-        SELECT id, category, date_display, time_range, minus_count
-        FROM minus
-        WHERE category IN ({placeholders})
-        AND date_origin >= ?
-        ORDER BY date_origin
-    """, subcategories + [today_str])
-    results = c.fetchall()
-    conn.close()
-    return results
-
-
-# データ追加
-def insert_minus(category, date_display, date_origin, time_range, minus_count):
-    conn = get_connection()
-    c = conn.cursor()
-    c.execute("""
-        INSERT INTO minus (category, date_display, date_origin, time_range, minus_count)
-        VALUES (?, ?, ?, ?, ?)
-    """, (category, date_display, date_origin, time_range, minus_count))
-    conn.commit()
-    conn.close()
-
-# データ更新／削除
-def update_minus(id, minus_count):
-    conn = get_connection()
-    c = conn.cursor()
-    if minus_count <= 0:
-        c.execute("DELETE FROM minus WHERE id = ?", (id,))
-    else:
-        c.execute("UPDATE minus SET minus_count = ? WHERE id = ?", (minus_count, id))
-    conn.commit()
-    conn.close()
-
-# LINE通知
 def send_group_notification(group_key, subcategories):
     records = fetch_minus(subcategories)
     if not records:
@@ -84,8 +84,8 @@ def send_group_notification(group_key, subcategories):
 
     message = "🆘マイナス日🆘\n"
     cat_map = {}
-    for _id, category, date_display, time_range, minus_count in records:
-        cat_map.setdefault(category, []).append((date_display, time_range, minus_count))
+    for record in records:
+        cat_map.setdefault(record["category"], []).append((record["date_display"], record["time_range"], record["minus_count"]))
 
     for cat, items in cat_map.items():
         message += f"\n{cat}\n"
@@ -97,14 +97,14 @@ def send_group_notification(group_key, subcategories):
     if not group_id:
         return
 
-    headers = {
+    headers_line = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {LINE_ACCESS_TOKEN}"
     }
     payload = {"to": group_id, "messages": [{"type": "text", "text": message.strip()}]}
-    requests.post("https://api.line.me/v2/bot/message/push", headers=headers, json=payload)
+    requests.post("https://api.line.me/v2/bot/message/push", headers=headers_line, json=payload)
 
-# カテゴリマッピング（色）
+# --- カテゴリ設定 ---
 color_map = {
     "ランチ【ホール】": "#ffe4b5",
     "ランチ【キッチン】": "#ffe4b5",
@@ -120,6 +120,8 @@ category_groups = {
 }
 
 # --- 画面表示スタート ---
+st.set_page_config(page_title="シフトマイナス管理システム", layout="wide")
+
 st.markdown("""
     <style>
         .main > div { max-width: 960px; margin: auto; }
@@ -172,6 +174,7 @@ if st.button("登録", use_container_width=True):
         minus_count
     )
     st.success("登録しました！")
+    st.rerun()
 
 st.divider()
 
@@ -190,7 +193,13 @@ records = fetch_minus(subcats)
 if not records:
     st.write("現在募集中のマイナスはありません。")
 else:
-    for _id, category, date_display, time_range, minus_count in records:
+    for record in records:
+        _id = record["id"]
+        category = record["category"]
+        date_display = record["date_display"]
+        time_range = record["time_range"]
+        minus_count = record["minus_count"]
+
         with st.container():
             st.markdown(f"""
                 <div style='background-color:{color_map.get(category)};
