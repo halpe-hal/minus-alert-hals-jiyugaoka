@@ -3,6 +3,28 @@ import sqlite3
 from datetime import datetime, time
 import requests
 
+# --- FastAPI起動用 ---
+from fastapi import FastAPI
+import uvicorn
+import threading
+
+app = FastAPI()
+
+@app.get("/run_notify")
+def run_notify():
+    try:
+        # ここに "notify_auto.py" の処理をそのままコピペしていく（後でやる！）
+        return {"status": "ok", "message": "通知処理が完了しました！"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+def start_fastapi():
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+
+# --- Streamlitと同時にFastAPIも起動 ---
+threading.Thread(target=start_fastapi, daemon=True).start()
+
+
 st.set_page_config(page_title="シフトマイナス管理システム", layout="wide")
 
 DB_FILE = "minus.db"
