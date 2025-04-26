@@ -7,9 +7,13 @@ app = FastAPI()
 
 # Streamlitアプリ起動
 def start_streamlit():
-    # ローカルではstreamlit run app/streamlit_app.py みたいな形だけど
-    # Render上では /app/app/streamlit_app.py というパスになる
-    subprocess.Popen(["streamlit", "run", "streamlit_app.py", "--server.port=10000", "--server.headless=true"])
+    port = os.environ.get("PORT", "10000")  # Render用に環境変数PORTを拾う
+    subprocess.Popen([
+        "streamlit", "run", "streamlit_app.py",
+        "--server.port", port,
+        "--server.headless", "true",
+        "--server.address", "0.0.0.0"  # これも必須！！
+    ])
 
 # サーバー起動時にStreamlitも一緒に起動する
 threading.Thread(target=start_streamlit, daemon=True).start()
