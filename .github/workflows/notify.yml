@@ -2,26 +2,13 @@ name: Notify Minus Alert
 
 on:
   schedule:
-    - cron: '0 0 * * *'  # 毎朝 9:00 (日本時間)  に実行
-  workflow_dispatch:  # 手動でも実行できる
+    - cron: '0 0 * * *'  # 毎日日本時間9:00に実行（後で直す）
+  workflow_dispatch:     # 手動実行もできる
 
 jobs:
   notify:
     runs-on: ubuntu-latest
-
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v3
-
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.9'
-
-    - name: Install dependencies
-      run: |
-        pip install -r requirements.txt
-
-    - name: Run notify_auto.py
-      run: |
-        python notify_auto.py
+      - name: HTTP request to /run_notify
+        run: |
+          curl -X GET https://minus-alert.onrender.com/run_notify
