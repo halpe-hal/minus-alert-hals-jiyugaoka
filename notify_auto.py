@@ -5,7 +5,6 @@ from pytz import timezone
 
 DB_FILE = "minus.db"
 
-# LINE設定
 LINE_ACCESS_TOKEN = "lszhy7usClELTs8XrUl5WUgz2eczgYDv8ej9BdTK4wGa1bH27e8Yaw1wErd8bieRYWEkjTvJXwmVv3c7rTVw/K7aUS4HOCwxd5jTpnohzUxn7+0eCRRAmlH6+LIJow4sAgPK8jELBzasnl9Nqo9/kAdB04t89/1O/w1cDnyilFU="
 CATEGORY_TO_GROUPID = {
     "ランチ": "C2addcfb0a7d3375c310ff01e42a1dc30",
@@ -13,18 +12,18 @@ CATEGORY_TO_GROUPID = {
     "ベーグル": "REDACTED_LINE_GROUP_ID"
 }
 
-# 通知対象日（3日前、2日前、1日前）
 NOTICE_DAYS_BEFORE = [3, 2, 1]
 
 def get_today_jst():
     jst = timezone('Asia/Tokyo')
-    return datetime.now(jst).date()
+    today = datetime.now(jst).date()
+    print(f"📅 今日の日付（JST）: {today}")
+    return today
 
 def get_connection():
     return sqlite3.connect(DB_FILE, check_same_thread=False)
 
 def fetch_minus():
-    today = get_today_jst()
     conn = get_connection()
     c = conn.cursor()
     c.execute("""
@@ -32,12 +31,14 @@ def fetch_minus():
         FROM minus
         ORDER BY date_origin
     """)
-    records = c.fetchall()
+    results = c.fetchall()
+    print(f"📄 データベースから取得した件数: {len(results)}")
     conn.close()
-    return records
+    return results
 
 def send_line_notification(group_id, message):
     if not group_id:
+        print("⚠️ グループIDが設定されていません。スキップ")
         return
     headers = {
         "Content-Type": "application/json",
@@ -49,8 +50,10 @@ def send_line_notification(group_id, message):
     }
     response = requests.post("https://api.line.me/v2/bot/message/push", headers=headers, json=payload)
     print("📨 通知送信結果：", response.status_code)
+    print("📨 レスポンス内容：", response.text)
 
 def main():
+    print("🚀 自動通知スクリプト開始")
     today = get_today_jst()
     all_records = fetch_minus()
 
@@ -60,6 +63,7 @@ def main():
     for id, category_full, date_display, time_range, minus_count, date_origin in all_records:
         date_obj = datetime.strptime(date_origin, "%Y-%m-%d").date()
         days_before = (date_obj - today).days
+        print(f"🔍 チェック中: {category_full} {date_display}（D-{days_before}）")
 
         if "ランチ" in category_full:
             group_key = "ランチ"
@@ -69,17 +73,13 @@ def main():
             group_key = "ベーグル"
 
         if days_before in NOTICE_DAYS_BEFORE:
-            if category_full not in group_records_urgent[group_key]:
-                group_records_urgent[group_key][category_full] = []
-            group_records_urgent[group_key][category_full].append({
+            group_records_urgent.setdefault(group_key, {}).setdefault(category_full, []).append({
                 "date_display": date_display,
                 "time_range": time_range,
                 "minus_count": minus_count
             })
         elif days_before > 3:
-            if category_full not in group_records_future[group_key]:
-                group_records_future[group_key][category_full] = []
-            group_records_future[group_key][category_full].append({
+            group_records_future.setdefault(group_key, {}).setdefault(category_full, []).append({
                 "date_display": date_display,
                 "time_range": time_range,
                 "minus_count": minus_count
@@ -87,8 +87,10 @@ def main():
 
     for group, subcats in group_records_urgent.items():
         if not subcats and not group_records_future[group]:
+            print(f"✅ {group}：通知する内容はなし")
             continue
 
+        print(f"📢 {group} グループへの通知を準備中...")
         message = ""
 
         if subcats:
@@ -108,6 +110,8 @@ def main():
             message += "\nご協力お願いします！🙇‍♂️"
 
         send_line_notification(CATEGORY_TO_GROUPID[group], message.strip())
+
+    print("✅ 通知スクリプト完了！")
 
 if __name__ == "__main__":
     main()
