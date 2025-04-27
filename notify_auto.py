@@ -107,4 +107,14 @@ def main():
         if group_records_future[group]:
             message += "\n▼先の日程のマイナス日▼\n"
             for subcat, records in sorted(group_records_future[group].items()):
-                message += f"\n{sub
+                message += f"\n{subcat}\n"
+                for record in sorted(records, key=lambda x: x["date_display"]):
+                    message += f"{record['date_display']} {record['time_range']} ▲{record['minus_count']}人\n"
+            message += "\nご協力お願いします！🙇‍♂️"
+
+        send_line_notification(CATEGORY_TO_GROUPID[group], message.strip())
+
+    print("✅ notify_auto.py 実行完了", flush=True)
+
+if __name__ == "__main__":
+    main()
