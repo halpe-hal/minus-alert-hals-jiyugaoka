@@ -2,7 +2,7 @@ name: Notify Minus Alert
 
 on:
   schedule:
-    - cron: '0 13 * * *'  # 毎日日本時間9:00に実行（後で直す）
+    - cron: '0 23 * * *'  # 毎日日本時間9:00に実行（後で直す）
   workflow_dispatch:     # 手動実行もできる
 
 jobs:
