@@ -16,7 +16,7 @@ headers = {
 LINE_ACCESS_TOKEN = "lszhy7usClELTs8XrUl5WUgz2eczgYDv8ej9BdTK4wGa1bH27e8Yaw1wErd8bieRYWEkjTvJXwmVv3c7rTVw/K7aUS4HOCwxd5jTpnohzUxn7+0eCRRAmlH6+LIJow4sAgPK8jELBzasnl9Nqo9/kAdB04t89/1O/w1cDnyilFU="
 
 CATEGORY_TO_GROUPID = {
-    "ランチ": "C2addcfb0a7d3375c310ff01e42a1dc30",
+    "ランチ": "REDACTED_LINE_GROUP_ID",
     "ディナー": "REDACTED_LINE_GROUP_ID",
     "ベーグル": "REDACTED_LINE_GROUP_ID"
 }
