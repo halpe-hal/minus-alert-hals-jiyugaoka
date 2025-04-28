@@ -1,5 +1,5 @@
 import requests
-import time  # ← sleep用に追加！
+import time
 from datetime import datetime
 from pytz import timezone
 
@@ -53,7 +53,7 @@ def fetch_all_minus():
         print("取得エラー:", response.text, flush=True)
         return []
 
-def send_line_notification(group_id, message):
+def send_line_notification(group_id, message, retry=1):
     if not group_id:
         return
     headers_line = {
@@ -64,15 +64,24 @@ def send_line_notification(group_id, message):
         "to": group_id,
         "messages": [{"type": "text", "text": message}]
     }
-    response = requests.post("https://api.line.me/v2/bot/message/push", headers=headers_line, json=payload)
-    print(f"📨 通知送信結果: {response.status_code}", flush=True)
+
+    for attempt in range(retry + 1):
+        response = requests.post("https://api.line.me/v2/bot/message/push", headers=headers_line, json=payload)
+        print(f"📨 通知送信結果 (try {attempt+1}): {response.status_code}", flush=True)
+
+        if response.status_code == 200:
+            return  # 成功したら即return
+        elif response.status_code == 429 and attempt < retry:
+            print("⏳ 429エラー。5秒待ってリトライします...", flush=True)
+            time.sleep(5)
+        else:
+            break  # リトライしてもダメなら抜ける
 
 # --- メイン処理 ---
 
 def main():
     print("🚀 notify_auto.py 実行開始", flush=True)
 
-    # まず過去日削除！
     cleanup_expired()
 
     today = get_today_jst()
@@ -125,10 +134,10 @@ def main():
                     message += f"{date_display} {time_range} ▲{minus_count}人\n"
             message += "\nご協力お願いします！🙇‍♂️"
 
-        # --- 通知を送信 ---
-        send_line_notification(CATEGORY_TO_GROUPID[group], message.strip())
+        # 通知送信（リトライ機能つき）
+        send_line_notification(CATEGORY_TO_GROUPID[group], message.strip(), retry=1)
 
-        # --- 通知間で1秒休憩する（★ここ追加★） ---
+        # 通知間でも1秒待つ
         time.sleep(1)
 
     print("✅ notify_auto.py 実行完了", flush=True)
