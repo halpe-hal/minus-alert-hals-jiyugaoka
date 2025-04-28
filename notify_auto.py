@@ -82,6 +82,7 @@ def send_line_notification(group_id, message, retry=1):
 def main():
     print("🚀 notify_auto.py 実行開始", flush=True)
 
+    # 過去日削除
     cleanup_expired()
 
     today = get_today_jst()
@@ -113,12 +114,15 @@ def main():
             group_records_future.setdefault(group_key, {}).setdefault(category_full, []).append((date_display, time_range, minus_count))
 
     for group, subcats in group_records_urgent.items():
-        if not subcats and not group_records_future[group]:
+        urgent_exists = any(subcats.values())  # 🔥直近マイナス日があるか判定
+
+        if not urgent_exists:
+            # 直近がないなら未来も含めて送らない
             continue
 
         message = ""
 
-        if subcats:
+        if urgent_exists:
             message += "🆘直近で埋まっていないマイナス日です！\n"
             for subcat, records in sorted(subcats.items()):
                 message += f"\n{subcat}\n"
@@ -134,11 +138,8 @@ def main():
                     message += f"{date_display} {time_range} ▲{minus_count}人\n"
             message += "\nご協力お願いします！🙇‍♂️"
 
-        # 通知送信（リトライ機能つき）
-        send_line_notification(CATEGORY_TO_GROUPID[group], message.strip(), retry=1)
-
-        # 通知間でも1秒待つ
-        time.sleep(1)
+        send_line_notification(CATEGORY_TO_GROUPID[group], message.strip())
+        time.sleep(1)  # ★送信ごとに1秒休憩
 
     print("✅ notify_auto.py 実行完了", flush=True)
 
