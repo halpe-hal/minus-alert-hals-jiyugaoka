@@ -13,8 +13,12 @@ headers = {
     "Content-Type": "application/json",
 }
 
-# --- LINE設定 ---
-LINE_ACCESS_TOKEN = "lszhy7usClELTs8XrUl5WUgz2eczgYDv8ej9BdTK4wGa1bH27e8Yaw1wErd8bieRYWEkjTvJXwmVv3c7rTVw/K7aUS4HOCwxd5jTpnohzUxn7+0eCRRAmlH6+LIJow4sAgPK8jELBzasnl9Nqo9/kAdB04t89/1O/w1cDnyilFU="
+# --- LINE設定（カテゴリ別トークンとグループID） ---
+CATEGORY_TO_ACCESS_TOKEN = {
+    "ランチ": "hmp3OjtL/EgTaApP1tZFBmH7pugsMhINkziSw2hALJwvycAbuaDWwka8yYiFTpx4YoB9V3+0uOSaUoerzUmAZPtDNaDJXb6XFop1cQ4B47sqLAGgQDMYQTUkmOD848KIaJJs9cSmJ6mnpJ3exzQGxAdB04t89/1O/w1cDnyilFU=",
+    "ディナー": "Z2sMt/mVYmkhaqkYdIGfVVW3SF1pDmuUYO9cRxtccnlV7kgK7SOpi0fRQdpb266lDQp8rMSgIN5src670FbzN/3H5XkH6LeQTJScREFH8rHj1RhP/psxoTDh2N4fywhsv+SUN8l0nmnXZ9Q5xzl4HQdB04t89/1O/w1cDnyilFU=",
+    "ベーグル": "aHnqYPGLV2yOqW80wEtnyV1BmixOyd6R/pdp4iQrAxK3qacd2eYPMwe0P9jKDuyzB1aJoZJII2YpLUGnrRhKybcZ9vhB72mCIugirf/kCU/Ebcr0IyvPBrfExwc+eUcYFrTvR6Dv1AvsVX28jvuESgdB04t89/1O/w1cDnyilFU="
+}
 
 CATEGORY_TO_GROUPID = {
     "ランチ": "REDACTED_LINE_GROUP_ID",
@@ -53,12 +57,13 @@ def fetch_all_minus():
         print("取得エラー:", response.text, flush=True)
         return []
 
-def send_line_notification(group_id, message, retry=1):
-    if not group_id:
-        return
+def send_line_notification(group_key, message, retry=1):
+    access_token = CATEGORY_TO_ACCESS_TOKEN[group_key]
+    group_id = CATEGORY_TO_GROUPID[group_key]
+
     headers_line = {
         "Content-Type": "application/json",
-        "Authorization": f"Bearer {LINE_ACCESS_TOKEN}"
+        "Authorization": f"Bearer {access_token}"
     }
     payload = {
         "to": group_id,
@@ -67,22 +72,21 @@ def send_line_notification(group_id, message, retry=1):
 
     for attempt in range(retry + 1):
         response = requests.post("https://api.line.me/v2/bot/message/push", headers=headers_line, json=payload)
-        print(f"📨 通知送信結果 (try {attempt+1}): {response.status_code}", flush=True)
+        print(f"📨 {group_key} 通知送信結果 (try {attempt+1}): {response.status_code}", flush=True)
 
         if response.status_code == 200:
-            return  # 成功したら即return
+            return
         elif response.status_code == 429 and attempt < retry:
-            print("⏳ 429エラー。5秒待ってリトライします...", flush=True)
-            time.sleep(5)
+            print("⏳ 429エラー。10秒待ってリトライします...", flush=True)
+            time.sleep(10)
         else:
-            break  # リトライしてもダメなら抜ける
+            break
 
 # --- メイン処理 ---
 
 def main():
     print("🚀 notify_auto.py 実行開始", flush=True)
 
-    # 過去日削除
     cleanup_expired()
 
     today = get_today_jst()
@@ -114,10 +118,9 @@ def main():
             group_records_future.setdefault(group_key, {}).setdefault(category_full, []).append((date_display, time_range, minus_count))
 
     for group, subcats in group_records_urgent.items():
-        urgent_exists = any(subcats.values())  # 🔥直近マイナス日があるか判定
+        urgent_exists = any(subcats.values())
 
         if not urgent_exists:
-            # 直近がないなら未来も含めて送らない
             continue
 
         message = ""
@@ -138,8 +141,8 @@ def main():
                     message += f"{date_display} {time_range} ▲{minus_count}人\n"
             message += "\nご協力お願いします！🙇‍♂️"
 
-        send_line_notification(CATEGORY_TO_GROUPID[group], message.strip())
-        time.sleep(1)  # ★送信ごとに1秒休憩
+        send_line_notification(group, message.strip())
+        time.sleep(3)
 
     print("✅ notify_auto.py 実行完了", flush=True)
 
