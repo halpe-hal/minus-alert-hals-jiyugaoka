@@ -1,4 +1,5 @@
 import requests
+import time  # ← sleep用に追加！
 from datetime import datetime
 from pytz import timezone
 
@@ -64,7 +65,7 @@ def send_line_notification(group_id, message):
         "messages": [{"type": "text", "text": message}]
     }
     response = requests.post("https://api.line.me/v2/bot/message/push", headers=headers_line, json=payload)
-    print("📨 通知送信結果:", response.status_code, flush=True)
+    print(f"📨 通知送信結果: {response.status_code}", flush=True)
 
 # --- メイン処理 ---
 
@@ -124,7 +125,11 @@ def main():
                     message += f"{date_display} {time_range} ▲{minus_count}人\n"
             message += "\nご協力お願いします！🙇‍♂️"
 
+        # --- 通知を送信 ---
         send_line_notification(CATEGORY_TO_GROUPID[group], message.strip())
+
+        # --- 通知間で1秒休憩する（★ここ追加★） ---
+        time.sleep(1)
 
     print("✅ notify_auto.py 実行完了", flush=True)
 
