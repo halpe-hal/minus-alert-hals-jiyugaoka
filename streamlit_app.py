@@ -12,6 +12,19 @@ headers = {
     "Authorization": f"Bearer {SUPABASE_API_KEY}",
 }
 
+# --- LINE設定（カテゴリ別トークンとグループID） ---
+CATEGORY_TO_ACCESS_TOKEN = {
+    "ランチ": "hmp3OjtL/EgTaApP1tZFBmH7pugsMhINkziSw2hALJwvycAbuaDWwka8yYiFTpx4YoB9V3+0uOSaUoerzUmAZPtDNaDJXb6XFop1cQ4B47sqLAGgQDMYQTUkmOD848KIaJJs9cSmJ6mnpJ3exzQGxAdB04t89/1O/w1cDnyilFU=",
+    "ディナー": "Z2sMt/mVYmkhaqkYdIGfVVW3SF1pDmuUYO9cRxtccnlV7kgK7SOpi0fRQdpb266lDQp8rMSgIN5src670FbzN/3H5XkH6LeQTJScREFH8rHj1RhP/psxoTDh2N4fywhsv+SUN8l0nmnXZ9Q5xzl4HQdB04t89/1O/w1cDnyilFU=",
+    "ベーグル": "aHnqYPGLV2yOqW80wEtnyV1BmixOyd6R/pdp4iQrAxK3qacd2eYPMwe0P9jKDuyzB1aJoZJII2YpLUGnrRhKybcZ9vhB72mCIugirf/kCU/Ebcr0IyvPBrfExwc+eUcYFrTvR6Dv1AvsVX28jvuESgdB04t89/1O/w1cDnyilFU="
+}
+
+CATEGORY_TO_GROUPID = {
+    "ランチ": "REDACTED_LINE_GROUP_ID",
+    "ディナー": "REDACTED_LINE_GROUP_ID",
+    "ベーグル": "REDACTED_LINE_GROUP_ID"
+}
+
 # --- 共通関数 ---
 
 def get_today_jst():
@@ -23,11 +36,9 @@ def fetch_minus(subcategories):
     params = {
         "select": "*",
         "category": f"in.({categories_query})",
-        "order": "date_origin"
+        "order": "date_origin",
+        "date_origin": f"gte.{get_today_jst().strftime('%Y-%m-%d')}"
     }
-    today_str = get_today_jst().strftime("%Y-%m-%d")
-    params["date_origin"] = f"gte.{today_str}"
-
     response = requests.get(f"{SUPABASE_URL}/rest/v1/minus", headers=headers, params=params)
     if response.status_code == 200:
         return response.json()
@@ -68,19 +79,13 @@ def update_minus(id, new_count):
         if response.status_code != 204:
             print("更新エラー:", response.text)
 
-# --- LINE通知設定 ---
-LINE_ACCESS_TOKEN = "lszhy7usClELTs8XrUl5WUgz2eczgYDv8ej9BdTK4wGa1bH27e8Yaw1wErd8bieRYWEkjTvJXwmVv3c7rTVw/K7aUS4HOCwxd5jTpnohzUxn7+0eCRRAmlH6+LIJow4sAgPK8jELBzasnl9Nqo9/kAdB04t89/1O/w1cDnyilFU="
-
-CATEGORY_TO_GROUPID = {
-    "ランチ": "REDACTED_LINE_GROUP_ID",
-    "ディナー": "REDACTED_LINE_GROUP_ID",
-    "ベーグル": "REDACTED_LINE_GROUP_ID"
-}
-
 def send_group_notification(group_key, subcategories):
     records = fetch_minus(subcategories)
     if not records:
         return
+
+    access_token = CATEGORY_TO_ACCESS_TOKEN[group_key]
+    group_id = CATEGORY_TO_GROUPID[group_key]
 
     message = "🆘マイナス日🆘\n"
     cat_map = {}
@@ -93,18 +98,16 @@ def send_group_notification(group_key, subcategories):
             message += f"{date_display} {time_range} ▲{minus_count}人\n"
     message += "\nご協力お願いします🙇‍♂️"
 
-    group_id = CATEGORY_TO_GROUPID[group_key]
-    if not group_id:
-        return
-
     headers_line = {
         "Content-Type": "application/json",
-        "Authorization": f"Bearer {LINE_ACCESS_TOKEN}"
+        "Authorization": f"Bearer {access_token}"
     }
     payload = {"to": group_id, "messages": [{"type": "text", "text": message.strip()}]}
     requests.post("https://api.line.me/v2/bot/message/push", headers=headers_line, json=payload)
 
-# --- カテゴリ設定 ---
+# --- 画面表示スタート ---
+st.set_page_config(page_title="シフトマイナス管理システム", layout="wide")
+
 color_map = {
     "ランチ【ホール】": "#ffe4b5",
     "ランチ【キッチン】": "#ffe4b5",
@@ -112,15 +115,6 @@ color_map = {
     "ディナー【キッチン】": "#d0eaff",
     "ベーグル": "#e1ffd0"
 }
-
-category_groups = {
-    "ランチ": ["ランチ【ホール】", "ランチ【キッチン】"],
-    "ディナー": ["ディナー【ホール】", "ディナー【キッチン】"],
-    "ベーグル": ["ベーグル"]
-}
-
-# --- 画面表示スタート ---
-st.set_page_config(page_title="シフトマイナス管理システム", layout="wide")
 
 st.markdown("""
     <style>
@@ -163,7 +157,7 @@ with col3:
 with col4:
     end_time = st.time_input("終了", value=time(13, 0))
 with col5:
-    minus_count = st.selectbox("人数", options=list(range(1, 6)), index=0)
+    minus_count = st.selectbox("人数", options=list(range(1, 6)))
 
 if st.button("登録", use_container_width=True):
     insert_minus(
@@ -185,6 +179,12 @@ st.markdown("""
         現在募集中のマイナス日
     </h2>
 """, unsafe_allow_html=True)
+
+category_groups = {
+    "ランチ": ["ランチ【ホール】", "ランチ【キッチン】"],
+    "ディナー": ["ディナー【ホール】", "ディナー【キッチン】"],
+    "ベーグル": ["ベーグル"]
+}
 
 selected_group = st.selectbox("カテゴリを選択", list(category_groups.keys()))
 subcats = category_groups[selected_group]
@@ -222,6 +222,8 @@ else:
                     update_minus(_id, new_count)
                     st.rerun()
 
-    if st.button(f"{selected_group}マイナス募集をする", use_container_width=True, key=f"notify_{selected_group}"):
-        send_group_notification(selected_group, subcats)
+    if st.button(f"{selected_group}マイナス募集通知を送る", use_container_width=True, key=f"notify_{selected_group}"):
+        send_group_notification(selected_group, category_groups[selected_group])
+
         st.success("通知を送信しました！")
+
