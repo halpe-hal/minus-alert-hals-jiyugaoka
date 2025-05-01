@@ -1,6 +1,6 @@
 import requests
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from pytz import timezone
 
 # --- Supabase設定 ---
@@ -13,7 +13,7 @@ headers = {
     "Content-Type": "application/json",
 }
 
-# --- LINE設定（カテゴリ別トークンとグループID） ---
+# --- LINE設定（カテゴリ別） ---
 CATEGORY_TO_ACCESS_TOKEN = {
     "ランチ": "hmp3OjtL/EgTaApP1tZFBmH7pugsMhINkziSw2hALJwvycAbuaDWwka8yYiFTpx4YoB9V3+0uOSaUoerzUmAZPtDNaDJXb6XFop1cQ4B47sqLAGgQDMYQTUkmOD848KIaJJs9cSmJ6mnpJ3exzQGxAdB04t89/1O/w1cDnyilFU=",
     "ディナー": "Z2sMt/mVYmkhaqkYdIGfVVW3SF1pDmuUYO9cRxtccnlV7kgK7SOpi0fRQdpb266lDQp8rMSgIN5src670FbzN/3H5XkH6LeQTJScREFH8rHj1RhP/psxoTDh2N4fywhsv+SUN8l0nmnXZ9Q5xzl4HQdB04t89/1O/w1cDnyilFU=",
@@ -26,7 +26,13 @@ CATEGORY_TO_GROUPID = {
     "ベーグル": "REDACTED_LINE_GROUP_ID"
 }
 
-NOTICE_DAYS_BEFORE = [3, 2, 1]
+CATEGORY_TO_CONTACT = {
+    "ランチ": "ヘルプ可能な方は【笹子MGR】へ個人LINEお願いします🙇‍♀️",
+    "ディナー": "ヘルプ可能な方は【田島店長】へ個人LINEお願いします🙇‍♀️",
+    "ベーグル": "ヘルプ可能な方は【堀井店長】へ個人LINEお願いします🙇‍♀️"
+}
+
+NOTICE_DAYS_BEFORE = [0, 1, 2, 3]
 
 # --- 共通関数 ---
 
@@ -88,12 +94,10 @@ def main():
     print("🚀 notify_auto.py 実行開始", flush=True)
 
     cleanup_expired()
-
     today = get_today_jst()
     records = fetch_all_minus()
 
-    group_records_urgent = {"ランチ": {}, "ディナー": {}, "ベーグル": {}}
-    group_records_future = {"ランチ": {}, "ディナー": {}, "ベーグル": {}}
+    group_records = {"ランチ": [], "ディナー": [], "ベーグル": []}
 
     for record in records:
         category_full = record["category"]
@@ -112,34 +116,20 @@ def main():
         else:
             group_key = "ベーグル"
 
-        if days_before in NOTICE_DAYS_BEFORE:
-            group_records_urgent.setdefault(group_key, {}).setdefault(category_full, []).append((date_display, time_range, minus_count))
-        elif days_before > 3:
-            group_records_future.setdefault(group_key, {}).setdefault(category_full, []).append((date_display, time_range, minus_count))
+        group_records[group_key].append((date_display, time_range, minus_count, days_before))
 
-    for group, subcats in group_records_urgent.items():
-        urgent_exists = any(subcats.values())
-
-        if not urgent_exists:
+    for group, items in group_records.items():
+        if not items:
             continue
 
-        message = ""
+        message = "⚠️シフトご協力お願いします⚠️\n\n"
 
-        if urgent_exists:
-            message += "🆘直近で埋まっていないマイナス日です！\n"
-            for subcat, records in sorted(subcats.items()):
-                message += f"\n{subcat}\n"
-                for date_display, time_range, minus_count in sorted(records):
-                    message += f"{date_display} {time_range} ▲{minus_count}人\n"
-            message += "\nご協力お願いします！🙇‍♂️\n\n"
+        for date_display, time_range, minus_count, days_before in sorted(items):
+            suffix = "🆘" if days_before in NOTICE_DAYS_BEFORE else ""
+            message += f"{date_display} {time_range} ▲{minus_count}人{suffix}\n"
 
-        if group_records_future[group]:
-            message += "\n▼先の日程のマイナス日▼\n"
-            for subcat, records in sorted(group_records_future[group].items()):
-                message += f"\n{subcat}\n"
-                for date_display, time_range, minus_count in sorted(records):
-                    message += f"{date_display} {time_range} ▲{minus_count}人\n"
-            message += "\nご協力お願いします！🙇‍♂️"
+        message += "\nーーーーーーーーー\n\n"
+        message += CATEGORY_TO_CONTACT[group]
 
         send_line_notification(group, message.strip())
         time.sleep(3)
