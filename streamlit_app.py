@@ -1,5 +1,5 @@
 import streamlit as st
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 import requests
 from pytz import timezone
 
@@ -87,16 +87,28 @@ def send_group_notification(group_key, subcategories):
     access_token = CATEGORY_TO_ACCESS_TOKEN[group_key]
     group_id = CATEGORY_TO_GROUPID[group_key]
 
-    message = "🆘マイナス日🆘\n"
-    cat_map = {}
-    for record in records:
-        cat_map.setdefault(record["category"], []).append((record["date_display"], record["time_range"], record["minus_count"]))
+    today = get_today_jst()
+    urgent_days = [(today + timedelta(days=i)).strftime("%m/%d") for i in range(4)]
 
-    for cat, items in cat_map.items():
-        message += f"\n{cat}\n"
-        for date_display, time_range, minus_count in items:
-            message += f"{date_display} {time_range} ▲{minus_count}人\n"
-    message += "\nご協力お願いします🙇‍♂️"
+    message = "🆘シフトご協力お願いします🆘\n\n"
+
+    for record in records:
+        date_display = record["date_display"]
+        time_range = record["time_range"]
+        minus_count = record["minus_count"]
+
+        suffix = "🆘" if date_display in urgent_days else ""
+        message += f"{date_display} {time_range} ▲{minus_count}人{suffix}\n"
+
+    message += "\nーーーーーーーーー\n\n"
+
+    # カテゴリ別 担当者名
+    if group_key == "ランチ":
+        message += "ヘルプ可能な方は【笹子MGR】へ個人LINEお願いします🙇‍♀️"
+    elif group_key == "ディナー":
+        message += "ヘルプ可能な方は【田島店長】へ個人LINEお願いします🙇‍♀️"
+    elif group_key == "ベーグル":
+        message += "ヘルプ可能な方は【堀井店長】へ個人LINEお願いします🙇‍♀️"
 
     headers_line = {
         "Content-Type": "application/json",
