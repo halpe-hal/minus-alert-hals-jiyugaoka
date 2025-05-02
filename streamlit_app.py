@@ -90,19 +90,28 @@ def send_group_notification(group_key, subcategories):
     today = get_today_jst()
     urgent_days = [(today + timedelta(days=i)).strftime("%m/%d") for i in range(4)]
 
-    message = "🆘シフトご協力お願いします🆘\n\n"
-
+    # --- サブカテゴリごとにまとめる ---
+    cat_map = {}
     for record in records:
+        cat = record["category"]
         date_display = record["date_display"]
         time_range = record["time_range"]
         minus_count = record["minus_count"]
-
         suffix = "🆘" if date_display in urgent_days else ""
-        message += f"{date_display} {time_range} ▲{minus_count}人{suffix}\n"
 
-    message += "\nーーーーーーーーー\n\n"
+        cat_map.setdefault(cat, []).append(f"{date_display} {time_range} ▲{minus_count}人{suffix}")
 
-    # カテゴリ別 担当者名
+    # --- メッセージ構築 ---
+    message = "🆘シフトご協力お願いします🆘\n\n"
+
+    for cat, lines in sorted(cat_map.items()):
+        message += f"{cat}\n"
+        for line in sorted(lines):  # 日付順に並ぶ
+            message += line + "\n"
+        message += "\n"
+
+    message += "ーーーーーーーーー\n\n"
+
     if group_key == "ランチ":
         message += "ヘルプ可能な方は【笹子MGR】へ個人LINEお願いします🙇‍♀️"
     elif group_key == "ディナー":
@@ -114,7 +123,10 @@ def send_group_notification(group_key, subcategories):
         "Content-Type": "application/json",
         "Authorization": f"Bearer {access_token}"
     }
-    payload = {"to": group_id, "messages": [{"type": "text", "text": message.strip()}]}
+    payload = {
+        "to": group_id,
+        "messages": [{"type": "text", "text": message.strip()}]
+    }
     requests.post("https://api.line.me/v2/bot/message/push", headers=headers_line, json=payload)
 
 # --- 画面表示スタート ---
