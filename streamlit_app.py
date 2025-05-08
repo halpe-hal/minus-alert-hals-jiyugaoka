@@ -14,9 +14,9 @@ headers = {
 
 # --- LINE設定（カテゴリ別トークンとグループID） ---
 CATEGORY_TO_ACCESS_TOKEN = {
-    "ランチ": "hmp3OjtL/EgTaApP1tZFBmH7pugsMhINkziSw2hALJwvycAbuaDWwka8yYiFTpx4YoB9V3+0uOSaUoerzUmAZPtDNaDJXb6XFop1cQ4B47sqLAGgQDMYQTUkmOD848KIaJJs9cSmJ6mnpJ3exzQGxAdB04t89/1O/w1cDnyilFU=",
-    "ディナー": "Z2sMt/mVYmkhaqkYdIGfVVW3SF1pDmuUYO9cRxtccnlV7kgK7SOpi0fRQdpb266lDQp8rMSgIN5src670FbzN/3H5XkH6LeQTJScREFH8rHj1RhP/psxoTDh2N4fywhsv+SUN8l0nmnXZ9Q5xzl4HQdB04t89/1O/w1cDnyilFU=",
-    "ベーグル": "aHnqYPGLV2yOqW80wEtnyV1BmixOyd6R/pdp4iQrAxK3qacd2eYPMwe0P9jKDuyzB1aJoZJII2YpLUGnrRhKybcZ9vhB72mCIugirf/kCU/Ebcr0IyvPBrfExwc+eUcYFrTvR6Dv1AvsVX28jvuESgdB04t89/1O/w1cDnyilFU="
+    "ランチ": "REDACTED_LINE_TOKEN",
+    "ディナー": "REDACTED_LINE_TOKEN",
+    "ベーグル": "REDACTED_LINE_TOKEN"
 }
 
 CATEGORY_TO_GROUPID = {
