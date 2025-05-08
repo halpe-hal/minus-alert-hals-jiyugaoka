@@ -77,10 +77,47 @@ def send_line_notification(group_key, message, retry=1):
             print("⏳ 429エラー、10秒待機", flush=True)
             time.sleep(10)
 
+# --- 提出締切リマインド通知 ---
+def check_and_notify_deadline_reminder():
+    group_id = "REDACTED_LINE_GROUP_ID"
+    access_token = CATEGORY_TO_ACCESS_TOKEN["ランチ"]  # 共通アカウント利用
+
+    url = f"{SUPABASE_URL}/rest/v1/shift_deadline?select=deadline&order=created_at.desc&limit=1"
+    response = requests.get(url, headers=headers)
+    if response.status_code != 200 or not response.json():
+        return
+
+    deadline = datetime.strptime(response.json()[0]["deadline"], "%Y-%m-%d").date()
+    today = get_today_jst()
+    days_left = (deadline - today).days
+
+    if days_left not in [3, 2, 1]:
+        return
+
+    if days_left == 3:
+        text = "⚠️シフト提出締切日まで【あと3日】です！\n\n提出が遅れる方は、\n\nランチ：笹子MGR\nディナー：田島店長\nベーグル：堀井店長\n\nまで必ず連絡ください！"
+    elif days_left == 2:
+        text = "⚠️シフト提出締切日まで【あと2日】です！\n\n提出が遅れる方は、\n\nランチ：笹子MGR\nディナー：田島店長\nベーグル：堀井店長\n\nまで必ず連絡ください！"
+    elif days_left == 1:
+        text = "⚠️【明日】がシフト提出締切日です！\nまだ提出していない方は提出お願いします🙇‍♀️\n\n提出が遅れる方は、\n\nランチ：笹子MGR\nディナー：田島店長\nベーグル：堀井店長\n\nまで必ず連絡ください！"
+
+    headers_line = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {access_token}"
+    }
+    payload = {
+        "to": group_id,
+        "messages": [{"type": "text", "text": text}]
+    }
+
+    requests.post("https://api.line.me/v2/bot/message/push", headers=headers_line, json=payload)
+    print(f"📅 締切リマインド通知（{days_left}日前）送信", flush=True)
+
 # --- メイン処理 ---
 
 def main():
     print("🚀 notify_auto.py 実行開始", flush=True)
+    check_and_notify_deadline_reminder()
     cleanup_expired()
 
     today = get_today_jst()
