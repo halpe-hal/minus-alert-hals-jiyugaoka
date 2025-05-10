@@ -1,0 +1,15 @@
+# 機密情報
+.env
+.streamlit/secrets.toml
+
+# Python
+__pycache__/
+*.pyc
+
+# 開発環境
+.vscode/
+.idea/
+
+# OS依存ファイル
+.DS_Store
+*.log
