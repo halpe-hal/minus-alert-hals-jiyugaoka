@@ -4,8 +4,8 @@ import requests
 from pytz import timezone
 
 # --- Supabase設定 ---
-SUPABASE_URL = "https://svexgvaaeeszdtsbggnf.supabase.co"
-SUPABASE_API_KEY = "REDACTED_SUPABASE_KEY"
+SUPABASE_URL = st.secrets["SUPABASE_URL"]
+SUPABASE_API_KEY = st.secrets["SUPABASE_API_KEY"]
 
 headers = {
     "apikey": SUPABASE_API_KEY,
@@ -14,15 +14,15 @@ headers = {
 
 # --- LINE設定（カテゴリ別トークンとグループID） ---
 CATEGORY_TO_ACCESS_TOKEN = {
-    "ランチ": "REDACTED_LINE_TOKEN",
-    "ディナー": "REDACTED_LINE_TOKEN",
-    "ベーグル": "REDACTED_LINE_TOKEN"
+    "ランチ": st.secrets["LINE_ACCESS_TOKENS"]["lunch"],
+    "ディナー": st.secrets["LINE_ACCESS_TOKENS"]["dinner"],
+    "ベーグル": st.secrets["LINE_ACCESS_TOKENS"]["bagel"],
 }
 
 CATEGORY_TO_GROUPID = {
-    "ランチ": "REDACTED_LINE_GROUP_ID",
-    "ディナー": "REDACTED_LINE_GROUP_ID",
-    "ベーグル": "REDACTED_LINE_GROUP_ID"
+    "ランチ": st.secrets["LINE_GROUP_IDS"]["lunch"],
+    "ディナー": st.secrets["LINE_GROUP_IDS"]["dinner"],
+    "ベーグル": st.secrets["LINE_GROUP_IDS"]["bagel"],
 }
 
 # --- 共通関数 ---
@@ -156,11 +156,10 @@ def get_current_deadline():
 
 # --- 提出締切をLINEグループに通知する関数 ---
 def notify_deadline_to_line(deadline_date):
-    access_token = list(CATEGORY_TO_ACCESS_TOKEN.values())[0]  # 共通トークン使用
-    group_id = "REDACTED_LINE_GROUP_ID"
+    access_token = st.secrets["LINE_ACCESS_TOKENS"]["lunch"]  # 共通トークンがランチと同じならこう
+    group_id = st.secrets["LINE_GROUP_IDS"]["deadline"]
 
-    # 🔽 年を省略して / 区切り表示に変更
-    formatted_date = deadline_date.strftime("%-m/%-d")  # Linux/mac の場合（Windowsなら "%#m/%#d"）
+    formatted_date = deadline_date.strftime("%-m/%-d")
     message = f"⚠️シフト提出締切日は\n【{formatted_date}】です！\n提出遅れないようにお願いします🙇‍♀️"
 
     headers_line = {

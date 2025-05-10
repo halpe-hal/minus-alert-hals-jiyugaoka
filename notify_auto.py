@@ -2,10 +2,14 @@ import requests
 import time
 from datetime import datetime, timedelta
 from pytz import timezone
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
 
 # --- Supabase設定 ---
-SUPABASE_URL = "https://svexgvaaeeszdtsbggnf.supabase.co"
-SUPABASE_API_KEY = "REDACTED_SUPABASE_KEY"
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_API_KEY = os.getenv("SUPABASE_API_KEY")
 
 headers = {
     "apikey": SUPABASE_API_KEY,
@@ -15,16 +19,18 @@ headers = {
 
 # --- LINE設定 ---
 CATEGORY_TO_ACCESS_TOKEN = {
-    "ランチ": "REDACTED_LINE_TOKEN",
-    "ディナー": "REDACTED_LINE_TOKEN",
-    "ベーグル": "REDACTED_LINE_TOKEN"
+    "ランチ": os.getenv("LINE_ACCESS_TOKEN_LUNCH"),
+    "ディナー": os.getenv("LINE_ACCESS_TOKEN_DINNER"),
+    "ベーグル": os.getenv("LINE_ACCESS_TOKEN_BAGEL"),
 }
 
 CATEGORY_TO_GROUPID = {
-    "ランチ": "REDACTED_LINE_GROUP_ID",
-    "ディナー": "REDACTED_LINE_GROUP_ID",
-    "ベーグル": "REDACTED_LINE_GROUP_ID"
+    "ランチ": os.getenv("LINE_GROUP_ID_LUNCH"),
+    "ディナー": os.getenv("LINE_GROUP_ID_DINNER"),
+    "ベーグル": os.getenv("LINE_GROUP_ID_BAGEL"),
 }
+
+DEADLINE_GROUP_ID = os.getenv("LINE_GROUP_ID_DEADLINE")
 
 
 CATEGORY_TO_CONTACT = {
@@ -79,8 +85,8 @@ def send_line_notification(group_key, message, retry=1):
 
 # --- 提出締切リマインド通知 ---
 def check_and_notify_deadline_reminder():
-    group_id = "REDACTED_LINE_GROUP_ID"
-    access_token = CATEGORY_TO_ACCESS_TOKEN["ランチ"]  # 共通アカウント利用
+    group_id = os.getenv("LINE_GROUP_ID_DEADLINE")
+    access_token = os.getenv("LINE_ACCESS_TOKEN_LUNCH")  # 共通アカウント
 
     url = f"{SUPABASE_URL}/rest/v1/shift_deadline?select=deadline&order=created_at.desc&limit=1"
     response = requests.get(url, headers=headers)
@@ -95,11 +101,27 @@ def check_and_notify_deadline_reminder():
         return
 
     if days_left == 3:
-        text = "⚠️シフト提出締切日まで【あと3日】です！\n\n提出が遅れる方は、\n\nランチ：笹子MGR\nディナー：田島店長\nベーグル：堀井店長\n\nまで必ず連絡ください！"
+        text = (
+            "⚠️シフト提出締切日まで【あと3日】です！\n\n"
+            "提出が遅れる方は、\n\n"
+            "ランチ：笹子MGR\nディナー：田島店長\nベーグル：堀井店長\n\n"
+            "まで必ず連絡ください！"
+        )
     elif days_left == 2:
-        text = "⚠️シフト提出締切日まで【あと2日】です！\n\n提出が遅れる方は、\n\nランチ：笹子MGR\nディナー：田島店長\nベーグル：堀井店長\n\nまで必ず連絡ください！"
+        text = (
+            "⚠️シフト提出締切日まで【あと2日】です！\n\n"
+            "提出が遅れる方は、\n\n"
+            "ランチ：笹子MGR\nディナー：田島店長\nベーグル：堀井店長\n\n"
+            "まで必ず連絡ください！"
+        )
     elif days_left == 1:
-        text = "⚠️【明日】がシフト提出締切日です！\nまだ提出していない方は提出お願いします🙇‍♀️\n\n提出が遅れる方は、\n\nランチ：笹子MGR\nディナー：田島店長\nベーグル：堀井店長\n\nまで必ず連絡ください！"
+        text = (
+            "⚠️【明日】がシフト提出締切日です！\n"
+            "まだ提出していない方は提出お願いします🙇‍♀️\n\n"
+            "提出が遅れる方は、\n\n"
+            "ランチ：笹子MGR\nディナー：田島店長\nベーグル：堀井店長\n\n"
+            "まで必ず連絡ください！"
+        )
 
     headers_line = {
         "Content-Type": "application/json",
