@@ -14,15 +14,13 @@ headers = {
 
 # --- LINE設定（カテゴリ別トークンとグループID） ---
 CATEGORY_TO_ACCESS_TOKEN = {
-    "ランチ": st.secrets["LINE_ACCESS_TOKENS"]["lunch"],
-    "ディナー": st.secrets["LINE_ACCESS_TOKENS"]["dinner"],
-    "ベーグル": st.secrets["LINE_ACCESS_TOKENS"]["bagel"],
+    "販売": st.secrets["LINE_ACCESS_TOKENS"]["hanbai"],
+    "製造": st.secrets["LINE_ACCESS_TOKENS"]["seizou"],
 }
 
 CATEGORY_TO_GROUPID = {
-    "ランチ": st.secrets["LINE_GROUP_IDS"]["lunch"],
-    "ディナー": st.secrets["LINE_GROUP_IDS"]["dinner"],
-    "ベーグル": st.secrets["LINE_GROUP_IDS"]["bagel"],
+    "販売": st.secrets["LINE_GROUP_IDS"]["hanbai"],
+    "製造": st.secrets["LINE_GROUP_IDS"]["seizou"],
 }
 
 # --- 共通関数 ---
@@ -39,7 +37,7 @@ def fetch_minus(subcategories):
         "order": "date_origin",
         "date_origin": f"gte.{get_today_jst().strftime('%Y-%m-%d')}"
     }
-    response = requests.get(f"{SUPABASE_URL}/rest/v1/minus", headers=headers, params=params)
+    response = requests.get(f"{SUPABASE_URL}/rest/v1/minus_hals_jiyugaoka", headers=headers, params=params)
     if response.status_code == 200:
         return response.json()
     else:
@@ -55,7 +53,7 @@ def insert_minus(category, date_display, date_origin, time_range, minus_count):
         "minus_count": minus_count
     }
     response = requests.post(
-        f"{SUPABASE_URL}/rest/v1/minus",
+        f"{SUPABASE_URL}/rest/v1/minus_hals_jiyugaoka",
         headers={**headers, "Content-Type": "application/json"},
         json=[new_data]
     )
@@ -65,14 +63,14 @@ def insert_minus(category, date_display, date_origin, time_range, minus_count):
 def update_minus(id, new_count):
     if new_count <= 0:
         response = requests.delete(
-            f"{SUPABASE_URL}/rest/v1/minus?id=eq.{id}",
+            f"{SUPABASE_URL}/rest/v1/minus_hals_jiyugaoka?id=eq.{id}",
             headers=headers
         )
         if response.status_code != 204:
             print("削除エラー:", response.text)
     else:
         response = requests.patch(
-            f"{SUPABASE_URL}/rest/v1/minus?id=eq.{id}",
+            f"{SUPABASE_URL}/rest/v1/minus_hals_jiyugaoka?id=eq.{id}",
             headers={**headers, "Content-Type": "application/json"},
             json={"minus_count": new_count}
         )
@@ -112,12 +110,10 @@ def send_group_notification(group_key, subcategories):
 
     message += "ーーーーーーーーー\n\n"
 
-    if group_key == "ランチ":
-        message += "ヘルプ可能な方は【笹子MGR】へ個人LINEお願いします🙇‍♀️"
-    elif group_key == "ディナー":
-        message += "ヘルプ可能な方は【田島店長】へ個人LINEお願いします🙇‍♀️"
-    elif group_key == "ベーグル":
-        message += "ヘルプ可能な方は【堀井店長】へ個人LINEお願いします🙇‍♀️"
+    if group_key == "販売":
+        message += "ヘルプ可能な方は【販売】のグループLINEへ連絡お願いします🙇‍♀️"
+    elif group_key == "製造":
+        message += "ヘルプ可能な方は【製造】のグループLINEへ連絡お願いします🙇‍♀️"
 
     headers_line = {
         "Content-Type": "application/json",
@@ -131,7 +127,7 @@ def send_group_notification(group_key, subcategories):
 
 # --- 提出締切取得 & 古いデータ自動削除（常に最新1件を残す） ---
 def get_current_deadline():
-    url = f"{SUPABASE_URL}/rest/v1/shift_deadline?select=id,deadline,created_at&order=created_at.desc"
+    url = f"{SUPABASE_URL}/rest/v1/shift_deadline_hals_jiyugaoka?select=id,deadline,created_at&order=created_at.desc"
     response = requests.get(url, headers=headers)
     if response.status_code == 200:
         rows = response.json()
@@ -143,20 +139,20 @@ def get_current_deadline():
 
         # 📌 今日より前なら削除して非表示に
         if latest_deadline < get_today_jst():
-            requests.delete(f"{SUPABASE_URL}/rest/v1/shift_deadline?id=eq.{latest['id']}", headers=headers)
+            requests.delete(f"{SUPABASE_URL}/rest/v1/shift_deadline_hals_jiyugaoka?id=eq.{latest['id']}", headers=headers)
             return None
 
         # 過去のデータを一括削除（最新以外）
         delete_ids = [r["id"] for r in rows if r["id"] != latest["id"]]
         for del_id in delete_ids:
-            requests.delete(f"{SUPABASE_URL}/rest/v1/shift_deadline?id=eq.{del_id}", headers=headers)
+            requests.delete(f"{SUPABASE_URL}/rest/v1/shift_deadline_hals_jiyugaoka?id=eq.{del_id}", headers=headers)
 
         return latest_deadline
     return None
 
 # --- 提出締切をLINEグループに通知する関数 ---
 def notify_deadline_to_line(deadline_date):
-    access_token = st.secrets["LINE_ACCESS_TOKENS"]["lunch"]  # 共通トークンがランチと同じならこう
+    access_token = st.secrets["LINE_ACCESS_TOKENS"]["hanbai"]  # 共通トークンが販売と同じならこう
     group_id = st.secrets["LINE_GROUP_IDS"]["deadline"]
 
     formatted_date = deadline_date.strftime("%-m/%-d")
@@ -177,10 +173,10 @@ def notify_deadline_to_line(deadline_date):
 
 # --- 提出締切更新処理（全削除して1件だけ保存） ---
 def update_deadline(new_date):
-    requests.delete(f"{SUPABASE_URL}/rest/v1/shift_deadline", headers=headers)
+    requests.delete(f"{SUPABASE_URL}/rest/v1/shift_deadline_hals_jiyugaoka", headers=headers)
     payload = [{"deadline": new_date.strftime("%Y-%m-%d")}]
     response = requests.post(
-        f"{SUPABASE_URL}/rest/v1/shift_deadline",
+        f"{SUPABASE_URL}/rest/v1/shift_deadline_hals_jiyugaoka",
         headers={**headers, "Content-Type": "application/json"},
         json=payload
     )
@@ -192,11 +188,8 @@ def update_deadline(new_date):
 st.set_page_config(page_title="シフトマイナス管理システム", layout="wide")
 
 color_map = {
-    "ランチ【ホール】": "#ffe4b5",
-    "ランチ【キッチン】": "#ffe4b5",
-    "ディナー【ホール】": "#d0eaff",
-    "ディナー【キッチン】": "#d0eaff",
-    "ベーグル": "#e1ffd0"
+    "販売": "#ffe4b5",
+    "製造": "#d0eaff",
 }
 
 st.markdown("""
@@ -292,9 +285,8 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 category_groups = {
-    "ランチ": ["ランチ【ホール】", "ランチ【キッチン】"],
-    "ディナー": ["ディナー【ホール】", "ディナー【キッチン】"],
-    "ベーグル": ["ベーグル"]
+    "販売": ["販売"],
+    "製造": ["製造"]
 }
 
 selected_group = st.selectbox("カテゴリを選択", list(category_groups.keys()))

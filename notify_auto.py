@@ -19,24 +19,21 @@ headers = {
 
 # --- LINE設定 ---
 CATEGORY_TO_ACCESS_TOKEN = {
-    "ランチ": os.getenv("LINE_ACCESS_TOKEN_LUNCH"),
-    "ディナー": os.getenv("LINE_ACCESS_TOKEN_DINNER"),
-    "ベーグル": os.getenv("LINE_ACCESS_TOKEN_BAGEL"),
+    "販売": os.getenv("LINE_ACCESS_TOKEN_HANBAI"),
+    "製造": os.getenv("LINE_ACCESS_TOKEN_SEIZOU"),
 }
 
 CATEGORY_TO_GROUPID = {
-    "ランチ": os.getenv("LINE_GROUP_ID_LUNCH"),
-    "ディナー": os.getenv("LINE_GROUP_ID_DINNER"),
-    "ベーグル": os.getenv("LINE_GROUP_ID_BAGEL"),
+    "販売": os.getenv("LINE_GROUP_ID_HANBAI"),
+    "製造": os.getenv("LINE_GROUP_ID_SEIZOU"),
 }
 
 DEADLINE_GROUP_ID = os.getenv("LINE_GROUP_ID_DEADLINE")
 
 
 CATEGORY_TO_CONTACT = {
-    "ランチ": "ヘルプ可能な方は【笹子MGR】へ個人LINEお願いします🙇‍♀️",
-    "ディナー": "ヘルプ可能な方は【田島店長】へ個人LINEお願いします🙇‍♀️",
-    "ベーグル": "ヘルプ可能な方は【堀井店長】へ個人LINEお願いします🙇‍♀️"
+    "販売": "ヘルプ可能な方は【販売】のグループLINEへ連絡お願いします🙇‍♀️",
+    "製造": "ヘルプ可能な方は【製造】のグループLINEへ連絡お願いします🙇‍♀️",
 }
 
 # --- 共通関数 ---
@@ -47,7 +44,7 @@ def get_today_jst():
 
 def cleanup_expired():
     today_str = get_today_jst().strftime("%Y-%m-%d")
-    url = f"{SUPABASE_URL}/rest/v1/minus?date_origin=lt.{today_str}"
+    url = f"{SUPABASE_URL}/rest/v1/minus_hals_jiyugaoka?date_origin=lt.{today_str}"
     response = requests.delete(url, headers=headers)
     if response.status_code in (200, 204):
         print(f"🧹 {today_str}より前を削除", flush=True)
@@ -59,7 +56,7 @@ def fetch_all_minus():
         "date_origin": f"gte.{today_str}",
         "order": "date_origin"
     }
-    response = requests.get(f"{SUPABASE_URL}/rest/v1/minus", headers=headers, params=params)
+    response = requests.get(f"{SUPABASE_URL}/rest/v1/minus_hals_jiyugaoka", headers=headers, params=params)
     return response.json() if response.status_code == 200 else []
 
 def send_line_notification(group_key, message, retry=1):
@@ -86,9 +83,9 @@ def send_line_notification(group_key, message, retry=1):
 # --- 提出締切リマインド通知 ---
 def check_and_notify_deadline_reminder():
     group_id = os.getenv("LINE_GROUP_ID_DEADLINE")
-    access_token = os.getenv("LINE_ACCESS_TOKEN_LUNCH")  # 共通アカウント
+    access_token = os.getenv("LINE_ACCESS_TOKEN_HANBAI")  # 共通アカウント
 
-    url = f"{SUPABASE_URL}/rest/v1/shift_deadline?select=deadline&order=created_at.desc&limit=1"
+    url = f"{SUPABASE_URL}/rest/v1/shift_deadline_hals_jiyugaoka?select=deadline&order=created_at.desc&limit=1"
     response = requests.get(url, headers=headers)
     if response.status_code != 200 or not response.json():
         return
@@ -104,14 +101,14 @@ def check_and_notify_deadline_reminder():
         text = (
             "⚠️シフト提出締切日まで【あと3日】です！\n\n"
             "提出が遅れる方は、\n\n"
-            "ランチ：笹子MGR\nディナー：田島店長\nベーグル：堀井店長\n\n"
+            "販売：宮内\n製造：宮内\n\n"
             "まで必ず連絡ください！"
         )
     elif days_left == 2:
         text = (
             "⚠️シフト提出締切日まで【あと2日】です！\n\n"
             "提出が遅れる方は、\n\n"
-            "ランチ：笹子MGR\nディナー：田島店長\nベーグル：堀井店長\n\n"
+            "販売：宮内\n製造：宮内\n\n"
             "まで必ず連絡ください！"
         )
     elif days_left == 1:
@@ -119,7 +116,7 @@ def check_and_notify_deadline_reminder():
             "⚠️【明日】がシフト提出締切日です！\n"
             "まだ提出していない方は提出お願いします🙇‍♀️\n\n"
             "提出が遅れる方は、\n\n"
-            "ランチ：笹子MGR\nディナー：田島店長\nベーグル：堀井店長\n\n"
+            "販売：宮内\n製造：宮内\n\n"
             "まで必ず連絡ください！"
         )
 
@@ -146,7 +143,7 @@ def main():
     urgent_days = [(today + timedelta(days=i)).strftime("%m/%d") for i in range(4)]
     records = fetch_all_minus()
 
-    group_data = {"ランチ": {}, "ディナー": {}, "ベーグル": {}}
+    group_data = {"販売": {}, "製造": {}}
 
     for record in records:
         category_full = record["category"]
@@ -154,34 +151,30 @@ def main():
         time_range = record["time_range"]
         minus_count = record["minus_count"]
 
-        if "ランチ" in category_full:
-            group = "ランチ"
-        elif "ディナー" in category_full:
-            group = "ディナー"
+        if "販売" in category_full:
+            group = "販売"
         else:
-            group = "ベーグル"
+            group = "製造"
 
         group_data.setdefault(group, {}).setdefault(category_full, []).append((date_display, time_range, minus_count))
 
     for group, cats in group_data.items():
-        urgent_found = False
+        # urgent_found は削除して常時通知に変更
         message = "⚠️シフトご協力お願いします⚠️\n\n"
 
-        for subcat, entries in cats.items():
-            urgent_entries = []
-            for date_display, time_range, minus_count in entries:
-                if date_display in urgent_days:
-                    urgent_found = True
-                urgent_entries.append((date_display, time_range, minus_count))
+        has_minus = False  # ←このグループに1件でもマイナスがあるか確認用
 
-            if urgent_entries:
+        for subcat, entries in cats.items():
+            if entries:
+                has_minus = True
                 message += f"{subcat}\n"
-                for date_display, time_range, minus_count in urgent_entries:
+                for date_display, time_range, minus_count in entries:
                     suffix = "🆘" if date_display in urgent_days else ""
                     message += f"{date_display} {time_range} ▲{minus_count}人{suffix}\n"
                 message += "\n"
 
-        if urgent_found:
+        # --- マイナスが1件でもあれば通知 ---
+        if has_minus:
             message += "ーーーーーーーーー\n\n"
             message += CATEGORY_TO_CONTACT[group]
             send_line_notification(group, message.strip())
