@@ -44,7 +44,7 @@ def get_today_jst():
 
 def cleanup_expired():
     today_str = get_today_jst().strftime("%Y-%m-%d")
-    url = f"{SUPABASE_URL}/rest/v1/minus?date_origin=lt.{today_str}"
+    url = f"{SUPABASE_URL}/rest/v1/minus_hals_jiyugaoka?date_origin=lt.{today_str}"
     response = requests.delete(url, headers=headers)
     if response.status_code in (200, 204):
         print(f"🧹 {today_str}より前を削除", flush=True)
@@ -56,7 +56,7 @@ def fetch_all_minus():
         "date_origin": f"gte.{today_str}",
         "order": "date_origin"
     }
-    response = requests.get(f"{SUPABASE_URL}/rest/v1/minus", headers=headers, params=params)
+    response = requests.get(f"{SUPABASE_URL}/rest/v1/minus_hals_jiyugaoka", headers=headers, params=params)
     return response.json() if response.status_code == 200 else []
 
 def send_line_notification(group_key, message, retry=1):
@@ -85,7 +85,7 @@ def check_and_notify_deadline_reminder():
     group_id = os.getenv("LINE_GROUP_ID_DEADLINE")
     access_token = os.getenv("LINE_ACCESS_TOKEN_HANBAI")  # 共通アカウント
 
-    url = f"{SUPABASE_URL}/rest/v1/shift_deadline?select=deadline&order=created_at.desc&limit=1"
+    url = f"{SUPABASE_URL}/rest/v1/shift_deadline_hals_jiyugaoka?select=deadline&order=created_at.desc&limit=1"
     response = requests.get(url, headers=headers)
     if response.status_code != 200 or not response.json():
         return
