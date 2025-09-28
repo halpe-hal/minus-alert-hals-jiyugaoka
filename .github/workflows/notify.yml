@@ -1,1 +1,14 @@
+name: Notify Minus Alert HAL'S Jiyugaoka
 
+on:
+  schedule:
+    - cron: '0 23 * * *'  # 毎日日本時間9:00に実行（後で直す）
+  workflow_dispatch:     # 手動実行もできる
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: HTTP request to /run_notify
+        run: |
+          curl -X GET https://minus-alert-hals-jiyugaoka.onrender.com/run_notify
