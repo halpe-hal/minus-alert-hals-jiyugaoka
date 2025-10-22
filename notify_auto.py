@@ -159,24 +159,22 @@ def main():
         group_data.setdefault(group, {}).setdefault(category_full, []).append((date_display, time_range, minus_count))
 
     for group, cats in group_data.items():
-        urgent_found = False
+        # urgent_found は削除して常時通知に変更
         message = "⚠️シフトご協力お願いします⚠️\n\n"
 
-        for subcat, entries in cats.items():
-            urgent_entries = []
-            for date_display, time_range, minus_count in entries:
-                if date_display in urgent_days:
-                    urgent_found = True
-                urgent_entries.append((date_display, time_range, minus_count))
+        has_minus = False  # ←このグループに1件でもマイナスがあるか確認用
 
-            if urgent_entries:
+        for subcat, entries in cats.items():
+            if entries:
+                has_minus = True
                 message += f"{subcat}\n"
-                for date_display, time_range, minus_count in urgent_entries:
+                for date_display, time_range, minus_count in entries:
                     suffix = "🆘" if date_display in urgent_days else ""
                     message += f"{date_display} {time_range} ▲{minus_count}人{suffix}\n"
                 message += "\n"
 
-        if urgent_found:
+        # --- マイナスが1件でもあれば通知 ---
+        if has_minus:
             message += "ーーーーーーーーー\n\n"
             message += CATEGORY_TO_CONTACT[group]
             send_line_notification(group, message.strip())
