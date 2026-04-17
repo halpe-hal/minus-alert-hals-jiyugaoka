@@ -31,3 +31,7 @@ dist/
 
 # Jupyter
 .ipynb_checkpoints/
+
+test_supabase.py
+
+setup_db.py
